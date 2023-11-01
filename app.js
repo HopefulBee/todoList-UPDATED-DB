@@ -1,135 +1,96 @@
-//jshint esversion:6
-
+//Required Modules
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-const _ = require("lodash");
+const date = require(__dirname + "/date.js");
 
 const app = express();
 
+//Set and Use
 app.set('view engine', 'ejs');
 
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-mongoose.connect("mongodb://127.0.0.1:27017/toDoListDB",  {useNewUrlParser: true });
+//Mongoose Database
+main().catch(err => console.log(err));
+async function main() {
+  await mongoose.connect('mongodb://127.0.0.1:27017/listDB');
 
-const itemsSchema = {
-  name: {type: String, required: true}
-};
+  //Item Schema
+  const itemsSchema = new mongoose.Schema({
+    name: String
+  });
+  const Item = mongoose.model("Item", itemsSchema);
+  const item1 = new Item({
+    name: "Prepare Documents for Mr. Darren"
+  });
+  const item2 = new Item({
+    name: "Print documents and fax it"
+  });
+  const defaultItems = [item1, item2];
+  const listSchema = {
+    name: String,
+    items: [itemsSchema]
+  }
 
-const Item = mongoose.model("Item", itemsSchema);
-
-
-const item1 = new Item({
-  name: "Wake Up"
-});
-
-const item2 = new Item({
-  name: "Brush my teeth"
-});
-
-const item3 = new Item({
-  name: "Bath"
-});
-
-const defaultItems = [item1, item2, item3];
-
-const listSchema = {
-  name: String,
-  items: [itemsSchema]
-};
-
-const List = mongoose.model("List", listSchema);
-
-
-app.get("/", function(req, res) {
-
-  Item.find({}, function(err, foundItems){
-
-    if (foundItems.length === 0) {
-      Item.insertMany(defaultItems, function(err){
-        if (err) {
-          console.log(err);
-        } else {
-          console.log("Successfully saved default items to DB.");
-        }
-      });
-      res.redirect("/");
-    } else {
-      res.render("list", {listTitle: "Today", newListItems: foundItems});
+  //List Schema
+  const List = mongoose.model("List", listSchema);
+  app.get("/", async function (req, res) {
+    const day = date.getDate();
+    const foundItems = await Item.find();
+    if (foundItems === 0) {
+      await Item.insertMany(defaultItems);
     }
+    res.render("list", { listTitle: day, newListItems: foundItems });
   });
 
-});
-
-app.get("/:customListName", function(req, res){
-  const customListName = _.capitalize(req.params.customListName);
-
-  List.findOne({name: customListName}, function(err, foundList){
-    if (!err){
-      if (!foundList){
-        //Create a new list
-        const list = new List({
-          name: customListName,
-          items: defaultItems
-        });
-        list.save();
-        res.redirect("/" + customListName);
-      } else {
-        //Show an existing list
-
-        res.render("list", {listTitle: foundList.name, newListItems: foundList.items});
-      }
-    }
-  });
-});
-
-app.post("/", function(req, res){
-
-  const itemName = req.body.newItem;
-  const listName = req.body.list;
-
-  const item = new Item({
-    name: itemName
+  app.get("/:customListName", async (req, res) => {
+    const customListName = req.params.customListName;
+    //Checking to see if a name already exists in our collection of list
+    //If it exists, it won't save
+    //If it doesn't, a new one would be created
+    //Did not work
+    // await List.findOne({ name: customListName });
+    // console.log(customListName);
+    // (err, foundList) => {
+    //     if (!foundList) {
+    //       console.log("Doesn't Exist");
+    //     } else {
+    //       console.log("Exists");
+    //  }
+    // }
+    const list = new List({
+      name: customListName,
+      items: defaultItems
+    });
+    await list.save();
   });
 
-  if (listName === "Today"){
-    item.save();
+  //Post Request on the Home Route
+  app.post("/", async function (req, res) {
+    const itemName = req.body.newItem;
+    const item = new Item({
+      name: itemName
+    });
+    await item.save();
     res.redirect("/");
-  } else {
-    List.findOne({name: listName}, function(err, foundList){
-      foundList.items.push(item);
-      foundList.save();
-      res.redirect("/" + listName);
-    });
-  }
-});
+  });
 
-app.post("/delete", function(req, res){
-  const checkedItemId = req.body.checkbox;
-  const listName = req.body.listName;
+  //Deletes a checked box and refreshes the page
+  app.post("/delete", (req, res) => {
+    const checkedItemId = req.body.checkbox;
+    //findByIdAndRemove doesn't work
+    Item.findByIdAndDelete(checkedItemId).exec();
+    res.redirect("/");
+  });
 
-  if (listName === "Today") {
-    Item.findByIdAndRemove(checkedItemId, function(err){
-      if (!err) {
-        console.log("Successfully deleted checked item.");
-        res.redirect("/");
-      }
-    });
-  } else {
-    List.findOneAndUpdate({name: listName}, {$pull: {items: {_id: checkedItemId}}}, function(err, foundList){
-      if (!err){
-        res.redirect("/" + listName);
-      }
-    });
-  }
-});
+  //Server Check
+  app.listen(3000, function () {
+    console.log("Server started on port 3000");
+  });
+}
 
-app.get("/about", function(req, res){
-  res.render("about");
-});
-
-app.listen(3000, function() {
-  console.log("Server started on port 3000");
-});
+// app.get("/about", function (req, res) {
+//   res.render("about");
+// });
