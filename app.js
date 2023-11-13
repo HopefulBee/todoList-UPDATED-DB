@@ -11,10 +11,13 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
+require('dotenv').config();
+const passWord = process.env.PASSWORD;
+
 //Mongoose Database
 main().catch(err => console.log(err));
 async function main() {
-  await mongoose.connect('mongodb://127.0.0.1:27017/listDB');
+  await mongoose.connect('mongodb+srv://ijeomahmaria:' + passWord + '@cluster0.ejhwqhq.mongodb.net/listDB');
 
   //Item Schema
   const itemsSchema = new mongoose.Schema({
